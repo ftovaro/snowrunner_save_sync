@@ -31,7 +31,7 @@ jobs:
 
       - name: Test triggering of workflow
         run: |
-          echo "Workflow triggered - version 1"
+          echo "Workflow triggered - version 2"
 
       - name: Determine source branch
         id: branch
