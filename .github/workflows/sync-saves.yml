@@ -1,4 +1,4 @@
-name: Sync SnowRunner Saves
+name: Update Money in Saves
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
       - svanegasg
     paths:
       - 'remote/**'
-      - 'remotecache.vdf'
       - 'scripts/**'
       - '.github/workflows/**'
 
@@ -15,144 +14,55 @@ permissions:
   contents: write
 
 jobs:
-  merge-saves:
+  update-money:
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all branches
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Test triggering of workflow
-        run: |
-          echo "Workflow triggered - version 2"
-
-      - name: Determine source branch
+      - name: Determine branch
         id: branch
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
-          echo "source=$BRANCH" >> $GITHUB_OUTPUT
-          if [ "$BRANCH" = "ftovaro" ]; then
-            echo "other=svanegasg" >> $GITHUB_OUTPUT
-          else
-            echo "other=ftovaro" >> $GITHUB_OUTPUT
-          fi
+          echo "current=$BRANCH" >> $GITHUB_OUTPUT
       
       - name: Configure git
         run: |
           git config user.name "SnowRunner Save Sync Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config core.autocrlf false
-          git config core.eol lf
       
-      - name: Fetch other player's branch
+      - name: Update money in CompleteSave.cfg
         run: |
-          git fetch origin ${{ steps.branch.outputs.other }}
+          echo "Updating money for ${{ steps.branch.outputs.current }} branch..."
+          python3 scripts/simple_money_update.py
       
-      - name: Create temporary directories
+      - name: Commit changes if money was updated
         run: |
-          mkdir -p /tmp/ftovaro_save
-          mkdir -p /tmp/svanegasg_save
-          mkdir -p /tmp/merged_ftovaro
-          mkdir -p /tmp/merged_svanegasg
-      
-      - name: Extract ftovaro saves
-        run: |
-          git checkout ftovaro
-          cp -r remote /tmp/ftovaro_save/
-          cp remotecache.vdf /tmp/ftovaro_save/ || true
-      
-      - name: Extract svanegasg saves
-        run: |
-          git checkout svanegasg
-          cp -r remote /tmp/svanegasg_save/
-          cp remotecache.vdf /tmp/svanegasg_save/ || true
-      
-      - name: Merge saves for ftovaro (preserve ftovaro customizations)
-        run: |
-          python3 scripts/merge_saves.py \
-            /tmp/ftovaro_save \
-            /tmp/svanegasg_save \
-            /tmp/merged_ftovaro \
-            --preserve ftovaro
-      
-      - name: Merge saves for svanegasg (preserve svanegasg customizations)
-        run: |
-          python3 scripts/merge_saves.py \
-            /tmp/ftovaro_save \
-            /tmp/svanegasg_save \
-            /tmp/merged_svanegasg \
-            --preserve svanegasg
-      
-      - name: Update ftovaro branch
-        run: |
-          git checkout ftovaro
-          # Copy ALL merged files from Python script output
-          cp -f /tmp/merged_ftovaro/remote/* remote/
-          cp -f /tmp/merged_ftovaro/remotecache.vdf . 2>/dev/null || true
-          
-          # Add null terminators ONLY to CompleteSave.cfg and CommonSslSave.cfg
-          for file in remote/CompleteSave.cfg remote/CommonSslSave.cfg; do
-            if [ -f "$file" ]; then
-              # Check if file ends with null byte, if not add it
-              if ! tail -c 1 "$file" | xxd -p | grep -q "00$"; then
-                printf '\x00' >> "$file"
-                echo "Added null terminator to $file"
-              fi
-            fi
-          done
-          
-          # Only commit if there are changes
-          if ! git diff --quiet HEAD; then
-            git add --force remote/*.cfg remotecache.vdf
-            git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
-            git push origin ftovaro
+          if ! git diff --quiet HEAD remote/CompleteSave.cfg; then
+            git add remote/CompleteSave.cfg
+            git commit -m "💰 Auto-update: Ensured minimum money ($200k)"
+            git push origin ${{ steps.branch.outputs.current }}
+            echo "Money updated and committed"
           else
-            echo "No changes to commit for ftovaro"
+            echo "No money update needed (already above minimum)"
           fi
       
-      - name: Update svanegasg branch
-        run: |
-          git checkout svanegasg
-          # Copy ALL merged files from Python script output  
-          cp -f /tmp/merged_svanegasg/remote/* remote/
-          cp -f /tmp/merged_svanegasg/remotecache.vdf . 2>/dev/null || true
-          
-          # Add null terminators ONLY to CompleteSave.cfg and CommonSslSave.cfg
-          for file in remote/CompleteSave.cfg remote/CommonSslSave.cfg; do
-            if [ -f "$file" ]; then
-              # Check if file ends with null byte, if not add it
-              if ! tail -c 1 "$file" | xxd -p | grep -q "00$"; then
-                printf '\x00' >> "$file"
-                echo "Added null terminator to $file"
-              fi
-            fi
-          done
-          
-          # Only commit if there are changes
-          if ! git diff --quiet HEAD; then
-            git add --force remote/*.cfg remotecache.vdf
-            git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
-            git push origin svanegasg
-          else
-            echo "No changes to commit for svanegasg"
-          fi
-      
-      - name: Create merge summary
+      - name: Create summary
         if: always()
         run: |
-          echo "## 🎮 Save Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 💰 Money Update Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered by:** ${{ steps.branch.outputs.source }} branch push" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ steps.branch.outputs.current }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Both branches updated with merged progress" >> $GITHUB_STEP_SUMMARY
-          echo "- ftovaro: Received shared progress + their own truck customizations" >> $GITHUB_STEP_SUMMARY
-          echo "- svanegasg: Received shared progress + their own truck customizations" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Money checked and updated if needed" >> $GITHUB_STEP_SUMMARY
+          echo "- Minimum money: \$200,000" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Next step:** Pull from your branch to get the synced save" >> $GITHUB_STEP_SUMMARY
+          echo "**Next step:** Pull from your branch to get the updated save" >> $GITHUB_STEP_SUMMARY
