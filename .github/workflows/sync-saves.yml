@@ -8,6 +8,8 @@ on:
     paths:
       - 'remote/**'
       - 'remotecache.vdf'
+      - 'scripts/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: write
