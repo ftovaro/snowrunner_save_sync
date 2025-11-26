@@ -164,6 +164,9 @@ for truck in trucks:
 
 
 if __name__ == "__main__":
+    import json
+    import os
+    
     print(__doc__)
     print("\n" + "="*50)
     print("TRUCK CUSTOMIZATION PATHS")
@@ -176,4 +179,54 @@ if __name__ == "__main__":
     print(f"  - Skin: {TruckPaths.TRUCK_SKIN}")
     print(f"  - Addons: {TruckPaths.TRUCK_ADDONS}")
     print(f"  - Damage: {TruckPaths.TRUCK_ENGINE_DAMAGE}, etc.")
+    
+    # Try to read and display current trucks
+    save_file = os.path.join(os.path.dirname(__file__), '..', 'remote', 'CompleteSave.cfg')
+    if os.path.exists(save_file):
+        print("\n" + "="*50)
+        print("CURRENT TRUCKS IN SAVE FILE")
+        print("="*50)
+        
+        try:
+            with open(save_file, 'rb') as f:
+                data = f.read()
+                # Remove null terminator if present
+                if data.endswith(b'\x00'):
+                    data = data[:-1]
+                save_data = json.loads(data.decode('utf-8'))
+            
+            trucks = save_data['CompleteSave']['SslValue']['persistentProfileData']['trucksInWarehouse']
+            
+            if not trucks:
+                print("\n⚠️  No trucks in warehouse")
+            else:
+                print(f"\n📦 Total trucks: {len(trucks)}\n")
+                
+                for i, truck in enumerate(trucks, 1):
+                    truck_type = truck.get('type', 'Unknown')
+                    location = truck.get('retainedMapId', 'Unknown')
+                    engine = truck.get('engine', {}).get('name', 'default')
+                    skin = truck.get('customizationPreset', {}).get('overrideMaterialName', 'default')
+                    addon_count = len(truck.get('addons', []))
+                    
+                    # Calculate damage percentage
+                    engine_dmg = truck.get('engineDamage', 0) * 100
+                    gearbox_dmg = truck.get('gearboxDamage', 0) * 100
+                    suspension_dmg = truck.get('suspensionDamage', 0) * 100
+                    avg_dmg = (engine_dmg + gearbox_dmg + suspension_dmg) / 3
+                    
+                    print(f"🚛 Truck #{i}: {truck_type}")
+                    print(f"   Location: {location}")
+                    print(f"   Engine: {engine}")
+                    print(f"   Paint: {skin}")
+                    print(f"   Addons: {addon_count}")
+                    print(f"   Damage: {avg_dmg:.1f}% avg (E:{engine_dmg:.0f}% G:{gearbox_dmg:.0f}% S:{suspension_dmg:.0f}%)")
+                    print()
+                    
+        except Exception as e:
+            print(f"\n❌ Error reading save file: {e}")
+    else:
+        print(f"\n⚠️  Save file not found at: {save_file}")
+    
+    print("\n" + "="*50)
     print(EXAMPLE_USAGE)
