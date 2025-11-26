@@ -85,8 +85,9 @@ jobs:
       - name: Update ftovaro branch
         run: |
           git checkout ftovaro
-          rm -rf remote remotecache.vdf
-          cp -r /tmp/merged_ftovaro/* .
+          # Merge files instead of replacing - preserves dynamically generated files
+          cp /tmp/merged_ftovaro/remote/* remote/
+          cp /tmp/merged_ftovaro/remotecache.vdf . 2>/dev/null || true
           
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
@@ -100,8 +101,9 @@ jobs:
       - name: Update svanegasg branch
         run: |
           git checkout svanegasg
-          rm -rf remote remotecache.vdf
-          cp -r /tmp/merged_svanegasg/* .
+          # Merge files instead of replacing - preserves dynamically generated files
+          cp /tmp/merged_svanegasg/remote/* remote/
+          cp /tmp/merged_svanegasg/remotecache.vdf . 2>/dev/null || true
           
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
