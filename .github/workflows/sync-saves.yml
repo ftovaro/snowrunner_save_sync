@@ -28,7 +28,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
+      - name: Test triggering of workflow
+        id: branch1
+        run: |
+          echo "version: 1" >> $GITHUB_OUTPUT
+
       - name: Determine source branch
         id: branch
         run: |
