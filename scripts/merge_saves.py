@@ -337,14 +337,17 @@ def main():
     parser.add_argument('output_dir', help='Output directory for merged save')
     parser.add_argument('--preserve', choices=['ftovaro', 'svanegasg'], required=True,
                         help='Which player\'s customizations to preserve')
-    parser.add_argument('--source', choices=['ftovaro', 'svanegasg'], required=False,
+    parser.add_argument('--source', choices=['ftovaro', 'svanegasg'],
                         help='Which player triggered the push (for binary files)')
     
     args = parser.parse_args()
     
+    # Get source player, default to preserve player if not specified
+    source_player = args.source if args.source else args.preserve
+    
     try:
         merger = SnowRunnerSaveMerger(args.player1_dir, args.player2_dir, args.output_dir)
-        merger.merge(args.preserve, args.source)
+        merger.merge(args.preserve, source_player)
         return 0
     except Exception as e:
         print(f"❌ Error: {e}", file=sys.stderr)
