@@ -44,6 +44,11 @@ jobs:
           echo "Updating money for ${{ steps.branch.outputs.current }} branch..."
           python3 scripts/simple_money_update.py
       
+      - name: Display truck customization paths
+        run: |
+          echo "📋 Truck customization reference:"
+          python3 scripts/truck_customization_paths.py
+      
       - name: Commit changes if money was updated
         run: |
           if ! git diff --quiet HEAD remote/CompleteSave.cfg; then
