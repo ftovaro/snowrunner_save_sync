@@ -12,6 +12,8 @@ permissions:
 jobs:
   update-money:
     runs-on: ubuntu-latest
+    outputs:
+      trigger: ${{ steps.branch.outputs.trigger }}
     
     steps:
       - name: Checkout repository
@@ -81,3 +83,59 @@ jobs:
           echo "- Minimum money: \$200,000" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next step:** Pull from your branch to get the updated save" >> $GITHUB_STEP_SUMMARY
+  
+  sync-to-main:
+    runs-on: ubuntu-latest
+    needs: update-money
+    if: needs.update-money.outputs.trigger == 'true' && (github.ref == 'refs/heads/ftovaro' || github.ref == 'refs/heads/svanegasg')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get source branch
+        id: source
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "🔄 Syncing $BRANCH → main"
+      
+      - name: Configure git
+        run: |
+          git config user.name "SnowRunner Save Sync Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Sync to main branch
+        run: |
+          SOURCE_BRANCH="${{ steps.source.outputs.branch }}"
+          
+          echo "Fetching main branch..."
+          git fetch origin main
+          
+          echo "Checking out main..."
+          git checkout main
+          
+          echo "Copying all files from $SOURCE_BRANCH..."
+          git checkout $SOURCE_BRANCH -- .
+          
+          echo "Checking for changes..."
+          if ! git diff --quiet HEAD; then
+            git add -A
+            git commit -m "🔄 Auto-sync from $SOURCE_BRANCH [triggered]"
+            git push origin main
+            echo "✅ Successfully synced $SOURCE_BRANCH to main"
+          else
+            echo "ℹ️ No changes to sync"
+          fi
+      
+      - name: Create sync summary
+        if: always()
+        run: |
+          echo "## 🔄 Sync to Main Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Source:** ${{ steps.source.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** main" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All files from ${{ steps.source.outputs.branch }} copied to main" >> $GITHUB_STEP_SUMMARY
