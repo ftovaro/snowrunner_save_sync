@@ -95,35 +95,57 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
       - name: Get source branch
         id: source
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          echo "🔄 Syncing $BRANCH → main"
+          echo "🔄 Syncing $BRANCH → main (preserving truck customizations)"
       
       - name: Configure git
         run: |
           git config user.name "SnowRunner Save Sync Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       
-      - name: Sync to main branch
+      - name: Fetch main branch CompleteSave.cfg
         run: |
           SOURCE_BRANCH="${{ steps.source.outputs.branch }}"
           
           echo "Fetching main branch..."
           git fetch origin main
           
+          echo "Extracting main's CompleteSave.cfg..."
+          git show origin/main:remote/CompleteSave.cfg > main_CompleteSave.cfg || echo "No main save found"
+      
+      - name: Sync saves preserving truck customizations
+        run: |
+          if [ -f main_CompleteSave.cfg ]; then
+            python3 scripts/sync_to_main.py main_CompleteSave.cfg synced_CompleteSave.cfg
+            cp synced_CompleteSave.cfg remote/CompleteSave.cfg
+          else
+            echo "⚠️  No main save to compare - using branch save as-is"
+            cp remote/CompleteSave.cfg synced_CompleteSave.cfg
+          fi
+      
+      - name: Push to main branch
+        run: |
+          SOURCE_BRANCH="${{ steps.source.outputs.branch }}"
+          
           echo "Checking out main..."
           git checkout main
           
-          echo "Copying all files from $SOURCE_BRANCH..."
-          git checkout $SOURCE_BRANCH -- .
+          echo "Copying synced save..."
+          cp synced_CompleteSave.cfg remote/CompleteSave.cfg
           
           echo "Checking for changes..."
-          if ! git diff --quiet HEAD; then
-            git add -A
-            git commit -m "🔄 Auto-sync from $SOURCE_BRANCH [triggered]"
+          if ! git diff --quiet HEAD remote/CompleteSave.cfg; then
+            git add remote/CompleteSave.cfg
+            git commit -m "🔄 Auto-sync from $SOURCE_BRANCH - preserved truck customizations [triggered]"
             git push origin main
             echo "✅ Successfully synced $SOURCE_BRANCH to main"
           else
@@ -138,4 +160,7 @@ jobs:
           echo "**Source:** ${{ steps.source.outputs.branch }}" >> $GITHUB_STEP_SUMMARY
           echo "**Target:** main" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ All files from ${{ steps.source.outputs.branch }} copied to main" >> $GITHUB_STEP_SUMMARY
+          echo "✅ CompleteSave.cfg synced with truck customizations preserved" >> $GITHUB_STEP_SUMMARY
+          echo "- New trucks from branch added to main" >> $GITHUB_STEP_SUMMARY
+          echo "- Existing trucks kept their main customizations" >> $GITHUB_STEP_SUMMARY
+          echo "- Progress, money, and discoveries synced" >> $GITHUB_STEP_SUMMARY
