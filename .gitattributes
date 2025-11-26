@@ -1,3 +1,4 @@
 # SnowRunner save files - treat as binary to preserve null terminators
-remote/*.cfg binary
-*.vdf binary
+# -text prevents ANY text processing including null byte stripping
+remote/*.cfg -text
+*.vdf -text
