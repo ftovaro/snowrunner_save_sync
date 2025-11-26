@@ -23,19 +23,14 @@ class SnowRunnerSaveMerger:
         self.player2_dir = Path(player2_dir)
         self.output_dir = Path(output_dir)
         
-    def merge(self, preserve_customizations_from: str, source_player: str = None):
+    def merge(self, preserve_customizations_from: str):
         """
         Merge saves, preserving customizations from specified player.
         
         Args:
             preserve_customizations_from: "ftovaro" or "svanegasg" - whose truck customizations to keep
-            source_player: "ftovaro" or "svanegasg" - who triggered the push (their binary files are used)
         """
         print(f"🔄 Merging saves (preserving {preserve_customizations_from} customizations)...")
-        
-        # Default source player to preserve player if not specified
-        if source_player is None:
-            source_player = preserve_customizations_from
         
         # Load saves
         player1_complete = self._load_json(self.player1_dir / "remote" / "CompleteSave.cfg")
@@ -63,8 +58,8 @@ class SnowRunnerSaveMerger:
         self._save_json(output_remote / "CompleteSave.cfg", merged_complete)
         self._save_json(output_remote / "CommonSslSave.cfg", merged_common)
         
-        # Handle binary files (fog, sts, mudmaps) - copy from source player
-        self._copy_binary_files(source_player)
+        # Handle binary files (fog, sts, mudmaps) - use larger file (more progress)
+        self._merge_binary_files()
         
         # Copy other config files from player with customizations
         source_dir = self.player1_dir if preserve_customizations_from == "ftovaro" else self.player2_dir
@@ -282,29 +277,50 @@ class SnowRunnerSaveMerger:
         else:
             print(f"    💰 Money is ${current_money:,} (above minimum)")
     
-    def _copy_binary_files(self, source_player: str):
-        """Copy binary fog/sts/mudmaps files from source player only - NO merging."""
-        print(f"  🗺️  Copying map files from {source_player}...")
+    def _merge_binary_files(self):
+        """Merge binary fog/sts/mudmaps files by selecting larger file (more progress)."""
+        print("  🗺️  Merging map discovery files...")
         
         output_remote = self.output_dir / "remote"
+        p1_remote = self.player1_dir / "remote"
+        p2_remote = self.player2_dir / "remote"
         
-        # Determine source directory based on source player
-        if source_player == "ftovaro":
-            source_remote = self.player1_dir / "remote"
-        else:
-            source_remote = self.player2_dir / "remote"
-        
-        # Copy ALL binary files from source player only
+        # Find all binary files
         binary_patterns = ['fog_*.cfg', 'sts_*.cfg', 'sts_mudmaps_*.cfg']
         
-        copied_count = 0
+        merged_count = 0
         for pattern in binary_patterns:
-            for source_file in source_remote.glob(pattern):
-                output_file = output_remote / source_file.name
-                shutil.copy2(source_file, output_file)
-                copied_count += 1
+            for p1_file in p1_remote.glob(pattern):
+                filename = p1_file.name
+                p2_file = p2_remote / filename
+                output_file = output_remote / filename
+                
+                if not p2_file.exists():
+                    # Only player1 has this file
+                    shutil.copy2(p1_file, output_file)
+                    merged_count += 1
+                else:
+                    # Both have it - use larger file (more progress)
+                    p1_size = p1_file.stat().st_size
+                    p2_size = p2_file.stat().st_size
+                    
+                    if p1_size >= p2_size:
+                        shutil.copy2(p1_file, output_file)
+                    else:
+                        shutil.copy2(p2_file, output_file)
+                    merged_count += 1
+            
+            # Check for files only player2 has
+            for p2_file in p2_remote.glob(pattern):
+                filename = p2_file.name
+                p1_file = p1_remote / filename
+                output_file = output_remote / filename
+                
+                if not p1_file.exists() and not output_file.exists():
+                    shutil.copy2(p2_file, output_file)
+                    merged_count += 1
         
-        print(f"    ✓ Copied {copied_count} map files from {source_player}")
+        print(f"    ✓ Merged {merged_count} map files")
     
     def _copy_other_files(self, source_dir: Path, output_dir: Path):
         """Copy other configuration files from source player."""
@@ -337,17 +353,12 @@ def main():
     parser.add_argument('output_dir', help='Output directory for merged save')
     parser.add_argument('--preserve', choices=['ftovaro', 'svanegasg'], required=True,
                         help='Which player\'s customizations to preserve')
-    parser.add_argument('--source', choices=['ftovaro', 'svanegasg'],
-                        help='Which player triggered the push (for binary files)')
     
     args = parser.parse_args()
     
-    # Get source player, default to preserve player if not specified
-    source_player = args.source if args.source else args.preserve
-    
     try:
         merger = SnowRunnerSaveMerger(args.player1_dir, args.player2_dir, args.output_dir)
-        merger.merge(args.preserve, source_player)
+        merger.merge(args.preserve)
         return 0
     except Exception as e:
         print(f"❌ Error: {e}", file=sys.stderr)
