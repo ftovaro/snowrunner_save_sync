@@ -9,6 +9,8 @@ on:
       - 'remote/**'
       - 'scripts/**'
       - '.github/workflows/**'
+    tags:
+      - 'truck-*'
 
 permissions:
   contents: write
@@ -28,11 +30,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Determine branch
+      - name: Determine branch and check for tags
         id: branch
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
           echo "current=$BRANCH" >> $GITHUB_OUTPUT
+          
+          # Check if triggered by a tag
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+            echo "📌 Workflow triggered by tag: $TAG_NAME"
+          else
+            echo "tag=" >> $GITHUB_OUTPUT
+            echo "📝 Workflow triggered by commit"
+          fi
       
       - name: Configure git
         run: |
@@ -47,7 +59,7 @@ jobs:
       - name: Display truck customization paths
         run: |
           echo "📋 Truck customization reference:"
-          python3 scripts/truck_customization_paths.py
+          python3 scripts/truck_customization_paths.py "${{ steps.branch.outputs.tag }}"
       
       - name: Commit changes if money was updated
         run: |

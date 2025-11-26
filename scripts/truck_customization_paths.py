@@ -166,8 +166,25 @@ for truck in trucks:
 if __name__ == "__main__":
     import json
     import os
+    import sys
     
-    print(__doc__)
+    # Check if a tag was passed as argument
+    tag_name = sys.argv[1] if len(sys.argv) > 1 else None
+    
+    if tag_name:
+        print("\n" + "="*50)
+        print("🏷️  TAG DETECTED")
+        print("="*50)
+        print(f"\nTag: {tag_name}")
+        
+        if tag_name.startswith('truck-'):
+            action = tag_name.replace('truck-', '')
+            print(f"Action requested: {action}")
+            print("\n⚠️  Truck operation requested but not yet implemented")
+            print("Future functionality will be added here")
+        else:
+            print("Not a truck-related tag (doesn't start with 'truck-')")
+    
     print("\n" + "="*50)
     print("TRUCK CUSTOMIZATION PATHS")
     print("="*50)
