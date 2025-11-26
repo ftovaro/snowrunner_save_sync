@@ -126,11 +126,14 @@ jobs:
         run: |
           if [ -f main_CompleteSave.cfg ]; then
             python3 scripts/sync_to_main.py main_CompleteSave.cfg synced_CompleteSave.cfg
-            cp synced_CompleteSave.cfg remote/CompleteSave.cfg
           else
             echo "⚠️  No main save to compare - using branch save as-is"
             cp remote/CompleteSave.cfg synced_CompleteSave.cfg
           fi
+      
+      - name: Move synced file to temp
+        run: |
+          mv synced_CompleteSave.cfg /tmp/synced_CompleteSave.cfg
       
       - name: Push to main branch
         run: |
@@ -140,7 +143,7 @@ jobs:
           git checkout main
           
           echo "Copying synced save..."
-          cp synced_CompleteSave.cfg remote/CompleteSave.cfg
+          cp /tmp/synced_CompleteSave.cfg remote/CompleteSave.cfg
           
           echo "Checking for changes..."
           if ! git diff --quiet HEAD remote/CompleteSave.cfg; then
