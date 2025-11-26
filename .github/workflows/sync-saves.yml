@@ -1,0 +1,126 @@
+name: Sync SnowRunner Saves
+
+on:
+  push:
+    branches:
+      - ftovaro
+      - svanegasg
+    paths:
+      - 'remote/**'
+      - 'remotecache.vdf'
+
+permissions:
+  contents: write
+
+jobs:
+  merge-saves:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all branches
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Determine source branch
+        id: branch
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          echo "source=$BRANCH" >> $GITHUB_OUTPUT
+          if [ "$BRANCH" = "ftovaro" ]; then
+            echo "other=svanegasg" >> $GITHUB_OUTPUT
+          else
+            echo "other=ftovaro" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Configure git
+        run: |
+          git config user.name "SnowRunner Save Sync Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Fetch other player's branch
+        run: |
+          git fetch origin ${{ steps.branch.outputs.other }}
+      
+      - name: Create temporary directories
+        run: |
+          mkdir -p /tmp/ftovaro_save
+          mkdir -p /tmp/svanegasg_save
+          mkdir -p /tmp/merged_ftovaro
+          mkdir -p /tmp/merged_svanegasg
+      
+      - name: Extract ftovaro saves
+        run: |
+          git checkout ftovaro
+          cp -r remote /tmp/ftovaro_save/
+          cp remotecache.vdf /tmp/ftovaro_save/ || true
+      
+      - name: Extract svanegasg saves
+        run: |
+          git checkout svanegasg
+          cp -r remote /tmp/svanegasg_save/
+          cp remotecache.vdf /tmp/svanegasg_save/ || true
+      
+      - name: Merge saves for ftovaro (preserve ftovaro customizations)
+        run: |
+          python3 scripts/merge_saves.py \
+            /tmp/ftovaro_save \
+            /tmp/svanegasg_save \
+            /tmp/merged_ftovaro \
+            --preserve ftovaro
+      
+      - name: Merge saves for svanegasg (preserve svanegasg customizations)
+        run: |
+          python3 scripts/merge_saves.py \
+            /tmp/ftovaro_save \
+            /tmp/svanegasg_save \
+            /tmp/merged_svanegasg \
+            --preserve svanegasg
+      
+      - name: Update ftovaro branch
+        run: |
+          git checkout ftovaro
+          rm -rf remote remotecache.vdf
+          cp -r /tmp/merged_ftovaro/* .
+          
+          # Only commit if there are changes
+          if ! git diff --quiet HEAD; then
+            git add .
+            git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
+            git push origin ftovaro
+          else
+            echo "No changes to commit for ftovaro"
+          fi
+      
+      - name: Update svanegasg branch
+        run: |
+          git checkout svanegasg
+          rm -rf remote remotecache.vdf
+          cp -r /tmp/merged_svanegasg/* .
+          
+          # Only commit if there are changes
+          if ! git diff --quiet HEAD; then
+            git add .
+            git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
+            git push origin svanegasg
+          else
+            echo "No changes to commit for svanegasg"
+          fi
+      
+      - name: Create merge summary
+        if: always()
+        run: |
+          echo "## 🎮 Save Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ steps.branch.outputs.source }} branch push" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Both branches updated with merged progress" >> $GITHUB_STEP_SUMMARY
+          echo "- ftovaro: Received shared progress + their own truck customizations" >> $GITHUB_STEP_SUMMARY
+          echo "- svanegasg: Received shared progress + their own truck customizations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next step:** Pull from your branch to get the synced save" >> $GITHUB_STEP_SUMMARY
