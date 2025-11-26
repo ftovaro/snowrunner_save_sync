@@ -33,12 +33,20 @@ jobs:
       - name: Determine branch and check for tags
         id: branch
         run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
+          # Get branch name
+          if [[ "$GITHUB_REF" == refs/heads/* ]]; then
+            BRANCH="${GITHUB_REF#refs/heads/}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            # For tags, get the branch from the commit
+            BRANCH=$(git branch -r --contains HEAD | grep -o 'origin/[^/]*' | head -1 | sed 's/origin\///')
+          else
+            BRANCH="unknown"
+          fi
           echo "current=$BRANCH" >> $GITHUB_OUTPUT
           
-          # Check if triggered by a tag
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          # Check for tags on current commit
+          TAG_NAME=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
+          if [ -n "$TAG_NAME" ]; then
             echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
             echo "📌 Workflow triggered by tag: $TAG_NAME"
           else
