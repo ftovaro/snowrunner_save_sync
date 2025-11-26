@@ -1,4 +1,9 @@
-# SnowRunner save files - treat as binary to preserve null terminators
-# -text prevents ANY text processing including null byte stripping
-remote/*.cfg -text
-*.vdf -text
+# SnowRunner JSON save files - treat as binary to preserve null terminators
+# Only these two files need the null terminator preserved
+remote/CompleteSave.cfg -text
+remote/CommonSslSave.cfg -text
+
+# Binary map files - treat as binary
+remote/fog_*.cfg binary
+remote/sts_*.cfg binary
+*.vdf binary
