@@ -94,7 +94,7 @@ jobs:
           
           # Copy binary fog/sts/mudmaps files (only if new or changed)
           # Strip any null terminators from binary files (they shouldn't have them)
-          for file in /tmp/merged_ftovaro/remote/fog_*.cfg /tmp/merged_ftovaro/remote/sts_*.cfg; do
+          for file in /tmp/merged_ftovaro/remote/fog_*.cfg /tmp/merged_ftovaro/remote/sts_*.cfg /tmp/merged_ftovaro/remote/sts_mudmaps_*.cfg; do
             if [ -f "$file" ]; then
               basename=$(basename "$file")
               # Remove null terminator if present
@@ -138,7 +138,7 @@ jobs:
           
           # Copy binary fog/sts/mudmaps files (only if new or changed)
           # Strip any null terminators from binary files (they shouldn't have them)
-          for file in /tmp/merged_svanegasg/remote/fog_*.cfg /tmp/merged_svanegasg/remote/sts_*.cfg; do
+          for file in /tmp/merged_svanegasg/remote/fog_*.cfg /tmp/merged_svanegasg/remote/sts_*.cfg /tmp/merged_svanegasg/remote/sts_mudmaps_*.cfg; do
             if [ -f "$file" ]; then
               basename=$(basename "$file")
               # Remove null terminator if present
