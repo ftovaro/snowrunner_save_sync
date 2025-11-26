@@ -75,9 +75,11 @@ class SnowRunnerSaveMerger:
             return json.loads(content)
     
     def _save_json(self, filepath: Path, data: Dict[str, Any]):
-        """Save JSON data to file."""
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, separators=(',', ':'))
+        """Save JSON data to file with null terminator (required by SnowRunner)."""
+        with open(filepath, 'wb') as f:
+            json_str = json.dumps(data, separators=(',', ':'))
+            f.write(json_str.encode('utf-8'))
+            f.write(b'\x00')  # Add null terminator - critical for SnowRunner!
     
     def _merge_common_save(self, p1: Dict, p2: Dict) -> Dict:
         """Merge CommonSslSave - take maximum progress from both players."""
