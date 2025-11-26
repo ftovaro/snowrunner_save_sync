@@ -168,22 +168,16 @@ if __name__ == "__main__":
     import os
     import sys
     
-    # Check if a tag was passed as argument
-    tag_name = sys.argv[1] if len(sys.argv) > 1 else None
+    # Check if trigger was activated
+    trigger_activated = sys.argv[1] if len(sys.argv) > 1 else "false"
     
-    if tag_name:
+    if trigger_activated == "true":
         print("\n" + "="*50)
-        print("🏷️  TAG DETECTED")
+        print("🚨 TRIGGER ACTIVATED")
         print("="*50)
-        print(f"\nTag: {tag_name}")
-        
-        if tag_name.startswith('truck-'):
-            action = tag_name.replace('truck-', '')
-            print(f"Action requested: {action}")
-            print("\n⚠️  Truck operation requested but not yet implemented")
-            print("Future functionality will be added here")
-        else:
-            print("Not a truck-related tag (doesn't start with 'truck-')")
+        print("\n⚠️  Special truck operation requested")
+        print("Future functionality will be added here")
+        print("(Detected [trigger] in commit message)")
     
     print("\n" + "="*50)
     print("TRUCK CUSTOMIZATION PATHS")

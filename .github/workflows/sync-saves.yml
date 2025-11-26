@@ -30,28 +30,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Determine branch and check for tags
+      - name: Determine branch and check for trigger
         id: branch
         run: |
-          # Get branch name
-          if [[ "$GITHUB_REF" == refs/heads/* ]]; then
-            BRANCH="${GITHUB_REF#refs/heads/}"
-          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # For tags, get the branch from the commit
-            BRANCH=$(git branch -r --contains HEAD | grep -o 'origin/[^/]*' | head -1 | sed 's/origin\///')
-          else
-            BRANCH="unknown"
-          fi
+          BRANCH="${GITHUB_REF#refs/heads/}"
           echo "current=$BRANCH" >> $GITHUB_OUTPUT
           
-          # Check for tags on current commit
-          TAG_NAME=$(git describe --exact-match --tags HEAD 2>/dev/null || echo "")
-          if [ -n "$TAG_NAME" ]; then
-            echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-            echo "📌 Workflow triggered by tag: $TAG_NAME"
+          # Get commit message
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          
+          # Check if commit message contains [trigger]
+          if echo "$COMMIT_MSG" | grep -qi "\[trigger\]"; then
+            echo "trigger=true" >> $GITHUB_OUTPUT
+            echo "🚨 TRIGGER ACTIVATED - Special operation requested"
           else
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "📝 Workflow triggered by commit"
+            echo "trigger=false" >> $GITHUB_OUTPUT
+            echo "📝 Normal workflow - no trigger"
           fi
       
       - name: Configure git
@@ -65,9 +60,10 @@ jobs:
           python3 scripts/simple_money_update.py
       
       - name: Display truck customization paths
+        if: steps.branch.outputs.trigger == 'true'
         run: |
           echo "📋 Truck customization reference:"
-          python3 scripts/truck_customization_paths.py "${{ steps.branch.outputs.tag }}"
+          python3 scripts/truck_customization_paths.py "${{ steps.branch.outputs.trigger }}"
       
       - name: Commit changes if money was updated
         run: |
