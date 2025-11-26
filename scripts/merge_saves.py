@@ -8,6 +8,7 @@ import json
 import sys
 import os
 import shutil
+import copy
 from pathlib import Path
 from typing import Dict, Any, List, Set
 import argparse
@@ -72,12 +73,16 @@ class SnowRunnerSaveMerger:
         with open(filepath, 'rb') as f:
             # Read as binary and strip null bytes that might be at the end
             content = f.read().rstrip(b'\x00').decode('utf-8')
+            # CRITICAL: Preserve key order - SnowRunner expects specific order
+            # Python 3.7+ dicts maintain insertion order by default
             return json.loads(content)
     
     def _save_json(self, filepath: Path, data: Dict[str, Any]):
         """Save JSON data to file with null terminator (required by SnowRunner)."""
         with open(filepath, 'wb') as f:
-            json_str = json.dumps(data, separators=(',', ':'))
+            # CRITICAL: Don't use sort_keys - SnowRunner expects specific key order!
+            # The game requires SslValue before SslType in CommonSslSave
+            json_str = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
             f.write(json_str.encode('utf-8'))
             f.write(b'\x00')  # Add null terminator - critical for SnowRunner!
     
@@ -85,8 +90,8 @@ class SnowRunnerSaveMerger:
         """Merge CommonSslSave - take maximum progress from both players."""
         print("  📊 Merging achievements and progress...")
         
-        # Start with player1's data
-        merged = json.loads(json.dumps(p1))  # Deep copy
+        # CRITICAL: Use proper deep copy that preserves key order
+        merged = copy.deepcopy(p1)
         
         p1_data = p1['CommonSslSave']['SslValue']
         p2_data = p2['CommonSslSave']['SslValue']
@@ -166,8 +171,8 @@ class SnowRunnerSaveMerger:
         """Merge CompleteSave - share progress, preserve customizations."""
         print("  🚚 Merging trucks and game state...")
         
-        # Start with deep copy
-        merged = json.loads(json.dumps(p1))
+        # CRITICAL: Use proper deep copy that preserves key order
+        merged = copy.deepcopy(p1)
         
         p1_data = p1['CompleteSave']['SslValue']
         p2_data = p2['CompleteSave']['SslValue']
