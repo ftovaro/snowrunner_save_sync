@@ -5,5 +5,6 @@ remote/CommonSslSave.cfg -text
 
 # Binary map files - treat as binary
 remote/fog_*.cfg binary
-remote/sts_*.cfg binary
+remote/sts_level_*.cfg binary
+remote/sts_mudmaps_*.cfg binary
 *.vdf binary
