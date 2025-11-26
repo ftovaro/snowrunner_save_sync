@@ -8,9 +8,29 @@ import json
 import sys
 import os
 import shutil
+import copy
 from pathlib import Path
 from typing import Dict, Any, List, Set
+from collections import OrderedDict
 import argparse
+
+
+def update_dict_preserve_order(target: Dict, updates: Dict) -> None:
+    """
+    Update target dict with values from updates dict while preserving key order.
+    CRITICAL: SnowRunner requires exact field order - this function ensures we don't reorder.
+    """
+    for key, value in updates.items():
+        if key in target:
+            if isinstance(value, dict) and isinstance(target[key], dict):
+                # Recursively update nested dicts
+                update_dict_preserve_order(target[key], value)
+            else:
+                # Update the value in place
+                target[key] = value
+        else:
+            # New key - add at end (shouldn't happen in merge, but safe)
+            target[key] = value
 
 
 class SnowRunnerSaveMerger:
@@ -23,19 +43,14 @@ class SnowRunnerSaveMerger:
         self.player2_dir = Path(player2_dir)
         self.output_dir = Path(output_dir)
         
-    def merge(self, preserve_customizations_from: str, source_player: str = None):
+    def merge(self, preserve_customizations_from: str):
         """
         Merge saves, preserving customizations from specified player.
         
         Args:
             preserve_customizations_from: "ftovaro" or "svanegasg" - whose truck customizations to keep
-            source_player: "ftovaro" or "svanegasg" - who triggered the push (their binary files are used)
         """
         print(f"🔄 Merging saves (preserving {preserve_customizations_from} customizations)...")
-        
-        # Default source player to preserve player if not specified
-        if source_player is None:
-            source_player = preserve_customizations_from
         
         # Load saves
         player1_complete = self._load_json(self.player1_dir / "remote" / "CompleteSave.cfg")
@@ -63,8 +78,18 @@ class SnowRunnerSaveMerger:
         self._save_json(output_remote / "CompleteSave.cfg", merged_complete)
         self._save_json(output_remote / "CommonSslSave.cfg", merged_common)
         
-        # Handle binary files (fog, sts, mudmaps) - copy from source player
-        self._copy_binary_files(source_player)
+        # Validate field order (critical for SnowRunner)
+        print("  🔍 Validating field order...")
+        common_order = ['objVersion', 'finishedTrials', 'birthVersion', 'achievementStates', 
+                       'givenProsEntitlements', 'saveSlotsTransaction', 'lastGeneratedId', 
+                       'platformStatsInfo', 'freezedTrailers']
+        if self._validate_field_order(output_remote / "CommonSslSave.cfg", common_order):
+            print("    ✓ CommonSslSave.cfg field order is correct")
+        else:
+            print("    ⚠️  WARNING: CommonSslSave.cfg field order may be incorrect!")
+        
+        # Handle binary files (fog, sts, mudmaps) - use larger file (more progress)
+        self._merge_binary_files()
         
         # Copy other config files from player with customizations
         source_dir = self.player1_dir if preserve_customizations_from == "ftovaro" else self.player2_dir
@@ -77,12 +102,26 @@ class SnowRunnerSaveMerger:
         with open(filepath, 'rb') as f:
             # Read as binary and strip null bytes that might be at the end
             content = f.read().rstrip(b'\x00').decode('utf-8')
+            # CRITICAL: Preserve key order - SnowRunner expects specific order
+            # Python 3.7+ dicts maintain insertion order by default
             return json.loads(content)
     
     def _save_json(self, filepath: Path, data: Dict[str, Any]):
-        """Save JSON data to file with null terminator (required by SnowRunner)."""
+        """
+        Save JSON data to file with null terminator (required by SnowRunner).
+        
+        CRITICAL FIELD ORDER REQUIREMENTS:
+        CommonSslSave.SslValue must have fields in this order:
+        1. objVersion, 2. finishedTrials, 3. birthVersion, 4. achievementStates,
+        5. givenProsEntitlements, 6. saveSlotsTransaction, 7. lastGeneratedId,
+        8. platformStatsInfo, 9. freezedTrailers
+        
+        CompleteSave has similar requirements - never reorder fields!
+        """
         with open(filepath, 'wb') as f:
-            json_str = json.dumps(data, separators=(',', ':'))
+            # CRITICAL: Don't use sort_keys - SnowRunner expects specific key order!
+            # Python 3.7+ dicts maintain insertion order, so this preserves original order
+            json_str = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
             f.write(json_str.encode('utf-8'))
             f.write(b'\x00')  # Add null terminator - critical for SnowRunner!
     
@@ -90,14 +129,16 @@ class SnowRunnerSaveMerger:
         """Merge CommonSslSave - take maximum progress from both players."""
         print("  📊 Merging achievements and progress...")
         
-        # Start with player1's data
-        merged = json.loads(json.dumps(p1))  # Deep copy
+        # CRITICAL: Use proper deep copy that preserves key order
+        # Start with p1 as template to maintain exact field ordering
+        merged = copy.deepcopy(p1)
         
         p1_data = p1['CommonSslSave']['SslValue']
         p2_data = p2['CommonSslSave']['SslValue']
         merged_data = merged['CommonSslSave']['SslValue']
         
         # Merge achievement states - take the maximum progress
+        # IMPORTANT: Only update values in-place, don't reassign the whole dict
         for achievement, p2_state in p2_data.get('achievementStates', {}).items():
             p1_state = p1_data.get('achievementStates', {}).get(achievement, {})
             
@@ -111,12 +152,20 @@ class SnowRunnerSaveMerger:
                     p2_values = set(p2_state.get('valuesArray', []))
                     merged_values = list(p1_values | p2_values)
                     
-                    merged_data['achievementStates'][achievement] = p2_state.copy()
-                    merged_data['achievementStates'][achievement]['valuesArray'] = merged_values
-                    merged_data['achievementStates'][achievement]['currentValue'] = len(merged_values)
-                    merged_data['achievementStates'][achievement]['isUnlocked'] = (
-                        p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
-                    )
+                    # Update in place to preserve field order
+                    if achievement in merged_data['achievementStates']:
+                        merged_data['achievementStates'][achievement]['valuesArray'] = merged_values
+                        merged_data['achievementStates'][achievement]['currentValue'] = len(merged_values)
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
+                    else:
+                        merged_data['achievementStates'][achievement] = p2_state.copy()
+                        merged_data['achievementStates'][achievement]['valuesArray'] = merged_values
+                        merged_data['achievementStates'][achievement]['currentValue'] = len(merged_values)
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
                     
                 elif 'PlatformIntWithStringArrayAchievementState' in achievement_type:
                     # Similar for platform-specific array achievements
@@ -124,12 +173,20 @@ class SnowRunnerSaveMerger:
                     p2_common = set(p2_state.get('commonValuesArray', []))
                     merged_common = list(p1_common | p2_common)
                     
-                    merged_data['achievementStates'][achievement] = p2_state.copy()
-                    merged_data['achievementStates'][achievement]['commonValuesArray'] = merged_common
-                    merged_data['achievementStates'][achievement]['commonValue'] = len(merged_common)
-                    merged_data['achievementStates'][achievement]['isUnlocked'] = (
-                        p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
-                    )
+                    # Update in place to preserve field order
+                    if achievement in merged_data['achievementStates']:
+                        merged_data['achievementStates'][achievement]['commonValuesArray'] = merged_common
+                        merged_data['achievementStates'][achievement]['commonValue'] = len(merged_common)
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
+                    else:
+                        merged_data['achievementStates'][achievement] = p2_state.copy()
+                        merged_data['achievementStates'][achievement]['commonValuesArray'] = merged_common
+                        merged_data['achievementStates'][achievement]['commonValue'] = len(merged_common)
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
                     
                 elif 'IntAchievementState' in achievement_type or 'PlatformtIntAchievementState' in achievement_type:
                     # For numeric achievements, take maximum
@@ -137,32 +194,42 @@ class SnowRunnerSaveMerger:
                     p2_val = p2_state.get('currentValue', 0) or p2_state.get('commonValue', 0)
                     max_val = max(p1_val, p2_val)
                     
-                    merged_data['achievementStates'][achievement] = p2_state.copy()
-                    if 'currentValue' in p2_state:
-                        merged_data['achievementStates'][achievement]['currentValue'] = max_val
-                    if 'commonValue' in p2_state:
-                        merged_data['achievementStates'][achievement]['commonValue'] = max_val
-                    merged_data['achievementStates'][achievement]['isUnlocked'] = (
-                        p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
-                    )
+                    # Update in place to preserve field order
+                    if achievement in merged_data['achievementStates']:
+                        if 'currentValue' in merged_data['achievementStates'][achievement]:
+                            merged_data['achievementStates'][achievement]['currentValue'] = max_val
+                        if 'commonValue' in merged_data['achievementStates'][achievement]:
+                            merged_data['achievementStates'][achievement]['commonValue'] = max_val
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
+                    else:
+                        merged_data['achievementStates'][achievement] = p2_state.copy()
+                        if 'currentValue' in p2_state:
+                            merged_data['achievementStates'][achievement]['currentValue'] = max_val
+                        if 'commonValue' in p2_state:
+                            merged_data['achievementStates'][achievement]['commonValue'] = max_val
+                        merged_data['achievementStates'][achievement]['isUnlocked'] = (
+                            p1_state.get('isUnlocked', False) or p2_state.get('isUnlocked', False)
+                        )
         
         # Merge platform stats - take maximum
+        # CRITICAL: Update in place to preserve field order
         p1_stats = p1_data.get('platformStatsInfo', {})
         p2_stats = p2_data.get('platformStatsInfo', {})
-        merged_data['platformStatsInfo'] = {
-            'totalDistanceMeters': max(
+        if 'platformStatsInfo' in merged_data:
+            merged_data['platformStatsInfo']['totalDistanceMeters'] = max(
                 p1_stats.get('totalDistanceMeters', 0),
                 p2_stats.get('totalDistanceMeters', 0)
-            ),
-            'totalCoopSessions': max(
+            )
+            merged_data['platformStatsInfo']['totalCoopSessions'] = max(
                 p1_stats.get('totalCoopSessions', 0),
                 p2_stats.get('totalCoopSessions', 0)
-            ),
-            'totalMoneyEarned': max(
+            )
+            merged_data['platformStatsInfo']['totalMoneyEarned'] = max(
                 p1_stats.get('totalMoneyEarned', 0),
                 p2_stats.get('totalMoneyEarned', 0)
             )
-        }
         
         print(f"    ✓ Merged achievements and discoveries")
         return merged
@@ -171,8 +238,8 @@ class SnowRunnerSaveMerger:
         """Merge CompleteSave - share progress, preserve customizations."""
         print("  🚚 Merging trucks and game state...")
         
-        # Start with deep copy
-        merged = json.loads(json.dumps(p1))
+        # CRITICAL: Use proper deep copy that preserves key order
+        merged = copy.deepcopy(p1)
         
         p1_data = p1['CompleteSave']['SslValue']
         p2_data = p2['CompleteSave']['SslValue']
@@ -282,29 +349,50 @@ class SnowRunnerSaveMerger:
         else:
             print(f"    💰 Money is ${current_money:,} (above minimum)")
     
-    def _copy_binary_files(self, source_player: str):
-        """Copy binary fog/sts/mudmaps files from source player only - NO merging."""
-        print(f"  🗺️  Copying map files from {source_player}...")
+    def _merge_binary_files(self):
+        """Merge binary fog/sts/mudmaps files by selecting larger file (more progress)."""
+        print("  🗺️  Merging map discovery files...")
         
         output_remote = self.output_dir / "remote"
+        p1_remote = self.player1_dir / "remote"
+        p2_remote = self.player2_dir / "remote"
         
-        # Determine source directory based on source player
-        if source_player == "ftovaro":
-            source_remote = self.player1_dir / "remote"
-        else:
-            source_remote = self.player2_dir / "remote"
-        
-        # Copy ALL binary files from source player only
+        # Find all binary files
         binary_patterns = ['fog_*.cfg', 'sts_*.cfg', 'sts_mudmaps_*.cfg']
         
-        copied_count = 0
+        merged_count = 0
         for pattern in binary_patterns:
-            for source_file in source_remote.glob(pattern):
-                output_file = output_remote / source_file.name
-                shutil.copy2(source_file, output_file)
-                copied_count += 1
+            for p1_file in p1_remote.glob(pattern):
+                filename = p1_file.name
+                p2_file = p2_remote / filename
+                output_file = output_remote / filename
+                
+                if not p2_file.exists():
+                    # Only player1 has this file
+                    shutil.copy2(p1_file, output_file)
+                    merged_count += 1
+                else:
+                    # Both have it - use larger file (more progress)
+                    p1_size = p1_file.stat().st_size
+                    p2_size = p2_file.stat().st_size
+                    
+                    if p1_size >= p2_size:
+                        shutil.copy2(p1_file, output_file)
+                    else:
+                        shutil.copy2(p2_file, output_file)
+                    merged_count += 1
+            
+            # Check for files only player2 has
+            for p2_file in p2_remote.glob(pattern):
+                filename = p2_file.name
+                p1_file = p1_remote / filename
+                output_file = output_remote / filename
+                
+                if not p1_file.exists() and not output_file.exists():
+                    shutil.copy2(p2_file, output_file)
+                    merged_count += 1
         
-        print(f"    ✓ Copied {copied_count} map files from {source_player}")
+        print(f"    ✓ Merged {merged_count} map files")
     
     def _copy_other_files(self, source_dir: Path, output_dir: Path):
         """Copy other configuration files from source player."""
@@ -328,6 +416,31 @@ class SnowRunnerSaveMerger:
                 shutil.copy2(src, dst)
         
         print(f"    ✓ Copied config files")
+    
+    def _validate_field_order(self, filepath: Path, expected_order: List[str]) -> bool:
+        """
+        Validate that JSON fields are in expected order.
+        Returns True if order is correct, False otherwise.
+        """
+        with open(filepath, 'rb') as f:
+            content = f.read().rstrip(b'\x00').decode('utf-8')
+            
+        # Find positions of each field
+        positions = {}
+        for field in expected_order:
+            pos = content.find(f'"{field}":')
+            if pos != -1:
+                positions[field] = pos
+        
+        # Check if positions are in ascending order
+        last_pos = -1
+        for field in expected_order:
+            if field in positions:
+                if positions[field] < last_pos:
+                    return False
+                last_pos = positions[field]
+        
+        return True
 
 
 def main():
@@ -337,17 +450,12 @@ def main():
     parser.add_argument('output_dir', help='Output directory for merged save')
     parser.add_argument('--preserve', choices=['ftovaro', 'svanegasg'], required=True,
                         help='Which player\'s customizations to preserve')
-    parser.add_argument('--source', choices=['ftovaro', 'svanegasg'],
-                        help='Which player triggered the push (for binary files)')
     
     args = parser.parse_args()
     
-    # Get source player, default to preserve player if not specified
-    source_player = args.source if args.source else args.preserve
-    
     try:
         merger = SnowRunnerSaveMerger(args.player1_dir, args.player2_dir, args.output_dir)
-        merger.merge(args.preserve, source_player)
+        merger.merge(args.preserve)
         return 0
     except Exception as e:
         print(f"❌ Error: {e}", file=sys.stderr)
