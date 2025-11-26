@@ -10,9 +10,7 @@ Automatically sync SnowRunner progress between two players while preserving indi
 ## 🚀 Setup
 
 ### SnowRunner Save Locations
-- **Windows**: `%USERPROFILE%\Documents\My Games\SnowRunner\base\storage\`
-- **macOS**: `~/Library/Application Support/SnowRunner/base/storage/`
-- **Linux**: `~/.local/share/SnowRunner/base/storage/`
+- **Windows**: `C:\Program Files (x86)\Steam\userdata\109587900\1465360\remote\`
 
 ### Initial Setup (in your SnowRunner save folder)
 
