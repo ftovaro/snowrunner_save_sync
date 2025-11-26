@@ -91,6 +91,17 @@ jobs:
           cp /tmp/merged_ftovaro/remote/* remote/
           cp /tmp/merged_ftovaro/remotecache.vdf . 2>/dev/null || true
           
+          # Verify null terminators are present (critical for SnowRunner)
+          for file in remote/*.cfg; do
+            if [ -f "$file" ]; then
+              # Check if file ends with null byte, if not add it
+              if ! tail -c 1 "$file" | xxd -p | grep -q "00$"; then
+                printf '\x00' >> "$file"
+                echo "Added null terminator to $file"
+              fi
+            fi
+          done
+          
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
             git add --force remote/*.cfg remotecache.vdf
@@ -106,6 +117,17 @@ jobs:
           # Merge files instead of replacing - preserves dynamically generated files
           cp /tmp/merged_svanegasg/remote/* remote/
           cp /tmp/merged_svanegasg/remotecache.vdf . 2>/dev/null || true
+          
+          # Verify null terminators are present (critical for SnowRunner)
+          for file in remote/*.cfg; do
+            if [ -f "$file" ]; then
+              # Check if file ends with null byte, if not add it
+              if ! tail -c 1 "$file" | xxd -p | grep -q "00$"; then
+                printf '\x00' >> "$file"
+                echo "Added null terminator to $file"
+              fi
+            fi
+          done
           
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
