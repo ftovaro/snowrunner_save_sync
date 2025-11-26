@@ -42,6 +42,8 @@ jobs:
         run: |
           git config user.name "SnowRunner Save Sync Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config core.autocrlf false
+          git config core.eol lf
       
       - name: Fetch other player's branch
         run: |
@@ -91,7 +93,7 @@ jobs:
           
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
-            git add .
+            git add --force remote/*.cfg remotecache.vdf
             git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
             git push origin ftovaro
           else
@@ -107,7 +109,7 @@ jobs:
           
           # Only commit if there are changes
           if ! git diff --quiet HEAD; then
-            git add .
+            git add --force remote/*.cfg remotecache.vdf
             git commit -m "🔄 Auto-sync: Merged progress from ${{ steps.branch.outputs.source }}"
             git push origin svanegasg
           else
