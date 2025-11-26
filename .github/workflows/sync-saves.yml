@@ -30,9 +30,8 @@ jobs:
           python-version: '3.11'
 
       - name: Test triggering of workflow
-        id: branch1
         run: |
-          echo "version: 1" >> $GITHUB_OUTPUT
+          echo "Workflow triggered - version 1"
 
       - name: Determine source branch
         id: branch
