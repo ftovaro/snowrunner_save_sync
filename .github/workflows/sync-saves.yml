@@ -140,6 +140,9 @@ jobs:
           # Copy all other remote files to temp (except CompleteSave.cfg)
           mkdir -p /tmp/remote_files
           cp -r remote/* /tmp/remote_files/ || true
+          
+          # Copy remotecache.vdf
+          cp remotecache.vdf /tmp/remotecache.vdf || true
       
       - name: Push to main branch
         run: |
@@ -154,9 +157,12 @@ jobs:
           echo "Copying all other remote files..."
           cp -r /tmp/remote_files/* remote/ || true
           
+          echo "Copying remotecache.vdf..."
+          cp /tmp/remotecache.vdf . || true
+          
           echo "Checking for changes..."
-          if ! git diff --quiet HEAD remote/; then
-            git add -A remote/
+          if ! git diff --quiet HEAD remote/ remotecache.vdf; then
+            git add -A remote/ remotecache.vdf
             git commit -m "🔄 Auto-sync from $SOURCE_BRANCH - preserved truck customizations [triggered]"
             git push origin main
             echo "✅ Successfully synced $SOURCE_BRANCH to main"
@@ -236,6 +242,9 @@ jobs:
           # Copy all remote files to temp (we're on main branch)
           mkdir -p /tmp/main_remote_files
           cp -r remote/* /tmp/main_remote_files/ || true
+          
+          # Copy remotecache.vdf
+          cp remotecache.vdf /tmp/main_remotecache.vdf || true
       
       - name: Move synced file to temp
         run: |
@@ -254,9 +263,12 @@ jobs:
           echo "Copying all other remote files from main..."
           cp -r /tmp/main_remote_files/* remote/ || true
           
+          echo "Copying remotecache.vdf from main..."
+          cp /tmp/main_remotecache.vdf remotecache.vdf || true
+          
           echo "Checking for changes..."
-          if ! git diff --quiet HEAD remote/; then
-            git add -A remote/
+          if ! git diff --quiet HEAD remote/ remotecache.vdf; then
+            git add -A remote/ remotecache.vdf
             git commit -m "🔄 Auto-sync from main - preserved truck customizations [triggered by ${{ steps.target.outputs.source }}]"
             git push origin $TARGET_BRANCH
             echo "✅ Successfully synced main to $TARGET_BRANCH"
