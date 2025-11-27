@@ -64,30 +64,40 @@ def get_truck_customization_keys():
     ]
 
 
+def get_truck_id(truck):
+    """Get unique identifier for a truck (id or globalId or retainedMapId+type combo)."""
+    truck_id = truck.get('id') or truck.get('globalId')
+    if truck_id:
+        return truck_id
+    # Fallback: use combination of type and location as identifier
+    return f"{truck.get('type')}@{truck.get('retainedMapId')}"
+
+
 def sync_trucks(branch_trucks, main_trucks):
     """
     Sync trucks from branch to main:
-    - New trucks from branch are added to main
-    - Existing trucks keep main's customizations but update type/location if changed
+    - New trucks from branch are added to main AS-IS (with their customizations)
+    - Existing trucks keep main's customizations
     - Removed trucks from branch are removed from main
     
     Returns: Updated truck list
     """
     customization_keys = get_truck_customization_keys()
     
-    # Create a map of trucks by type for easy lookup
-    main_trucks_by_type = {truck.get('type'): truck for truck in main_trucks}
-    branch_trucks_by_type = {truck.get('type'): truck for truck in branch_trucks}
+    # Create a map of trucks by unique ID
+    main_trucks_by_id = {get_truck_id(truck): truck for truck in main_trucks}
+    branch_trucks_by_id = {get_truck_id(truck): truck for truck in branch_trucks}
     
     synced_trucks = []
     
     # Process all trucks from branch
     for branch_truck in branch_trucks:
+        truck_id = get_truck_id(branch_truck)
         truck_type = branch_truck.get('type')
         
-        if truck_type in main_trucks_by_type:
-            # Truck exists in main - preserve customizations
-            main_truck = main_trucks_by_type[truck_type]
+        if truck_id in main_trucks_by_id:
+            # Truck exists in main - preserve customizations from main
+            main_truck = main_trucks_by_id[truck_id]
             synced_truck = branch_truck.copy()
             
             # Restore customizations from main
@@ -96,16 +106,17 @@ def sync_trucks(branch_trucks, main_trucks):
                     synced_truck[key] = main_truck[key]
             
             synced_trucks.append(synced_truck)
-            print(f"  ✓ Preserved customizations for: {truck_type}")
+            print(f"  ✓ Preserved customizations for: {truck_type} ({truck_id})")
         else:
-            # New truck from branch - add as-is
+            # New truck from branch - add with branch customizations
             synced_trucks.append(branch_truck)
-            print(f"  + New truck added: {truck_type}")
+            print(f"  + New truck added with branch customizations: {truck_type} ({truck_id})")
     
     # Report removed trucks
-    for truck_type in main_trucks_by_type:
-        if truck_type not in branch_trucks_by_type:
-            print(f"  - Truck removed: {truck_type}")
+    for truck_id in main_trucks_by_id:
+        if truck_id not in branch_trucks_by_id:
+            truck_type = main_trucks_by_id[truck_id].get('type')
+            print(f"  - Truck removed: {truck_type} ({truck_id})")
     
     return synced_trucks
 
