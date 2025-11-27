@@ -237,6 +237,10 @@ jobs:
           mkdir -p /tmp/main_remote_files
           cp -r remote/* /tmp/main_remote_files/ || true
       
+      - name: Move synced file to temp
+        run: |
+          mv synced_target_CompleteSave.cfg /tmp/synced_target_CompleteSave.cfg
+      
       - name: Push to target branch
         run: |
           TARGET_BRANCH="${{ steps.target.outputs.target }}"
@@ -245,7 +249,7 @@ jobs:
           git checkout $TARGET_BRANCH
           
           echo "Copying synced CompleteSave.cfg..."
-          cp ../synced_target_CompleteSave.cfg remote/CompleteSave.cfg
+          cp /tmp/synced_target_CompleteSave.cfg remote/CompleteSave.cfg
           
           echo "Copying all other remote files from main..."
           cp -r /tmp/main_remote_files/* remote/ || true
